@@ -92,7 +92,7 @@ Removing or replacing it should not affect the execution of the samples in anywa
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.6.0</version>
+            <version>42.6.1</version>
         </dependency>
 
         <!-- Spring Boot Test -->
