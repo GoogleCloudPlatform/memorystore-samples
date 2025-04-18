@@ -115,7 +115,8 @@ public final class Main {
     return (int) (skewedRandom * maxScore);
   }
 
-  private static String applyLeetSpeak(final String input, final Random random) {
+  private static String applyLeetSpeak(final String input,
+      final Random random) {
     char[] characters = input.toCharArray();
     for (int i = 0; i < characters.length; i++) {
       if (random.nextDouble() < LEETSPEAK_PROBABILITY) {
@@ -132,7 +133,8 @@ public final class Main {
     return new String(characters);
   }
 
-  private static String applyRandomFormatting(final String input, final Random random) {
+  private static String applyRandomFormatting(final String input,
+      final Random random) {
     return switch (random.nextInt(FORMAT_OPTIONS)) {
       case 0 -> input.toLowerCase();
       case 1 -> input.toUpperCase();

@@ -20,16 +20,16 @@ import redis.clients.jedis.JedisPool;
 public final class MemorystoreWriteItem {
 
   /** Replace the Memorystore instance id. */
-  private static final String INSTANCE_ID = "127.0.0.1";
+  private static final String INSTANCE_ID = "INSTANCE_ID";
 
   /** Replace the Memorystore port, if not the default port. */
   private static final int PORT = 6379;
 
   /** Replace the id of the item to write to Memorystore. */
-  private static final String ITEM_ID = "Testtwo";
+  private static final String ITEM_ID = "ITEM_ID";
 
   /** Replace the id of the item to write to Memorystore. */
-  private static final String ITEM_VALUE = "Testtwo";
+  private static final String ITEM_VALUE = "ITEM_VALUE";
 
   private MemorystoreWriteItem() {
     // No-op; won't be called

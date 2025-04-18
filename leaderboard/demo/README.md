@@ -10,6 +10,7 @@ This demo shows how to use Valkey as an in-memory cache to accelerate data retri
 
 - **PostgreSQL**: [Download & Install](https://www.postgresql.org/download/)
 - **Valkey** (Redis-compatible): [Download & Install](https://valkey.io/download/)
+- **Docker** (optional) [Download & Install](https://docs.docker.com/engine/install/)
 
 ### 2. Create a Postgres user called `postgres`
 
@@ -22,7 +23,7 @@ createuser -s postgres
 ```bash
 export DB_URL=jdbc:postgresql://localhost:5432/postgres
 export DB_USERNAME=postgres
-export DB_PASSWORD=your_postgres_password
+export DB_PASSWORD=password
 ```
 
 ### 4. Initialize the Database Schema

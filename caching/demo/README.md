@@ -10,6 +10,7 @@ This demo shows how to use Valkey as an in-memory cache to accelerate data retri
 
 - **PostgreSQL**: [Download & Install](https://www.postgresql.org/download/)
 - **Valkey** (Redis-compatible): [Download & Install](https://valkey.io/download/)
+- **Docker** (optional) [Download & Install](https://docs.docker.com/engine/install/)
 
 ### 2. Create a Postgres user called `postgres`
 
@@ -22,7 +23,7 @@ createuser -s postgres
 ```bash
 export DB_URL=jdbc:postgresql://localhost:5432/postgres
 export DB_USERNAME=postgres
-export DB_PASSWORD=your_postgres_password
+export DB_PASSWORD=password
 ```
 
 ### 4. Initialize the Database Schema
@@ -132,7 +133,7 @@ CREATE TABLE IF NOT EXISTS items (
 );
 ```
 
-4. You will be required to allow unauthenticated invocations. Navigate to your [Leaderboasrd App Service](https://console.cloud.google.com/run/detail/us-central1/leaderboard-app-service/security?) to enable this.
+4. You will be required to allow unauthenticated invocations. Navigate to your [Caching App Service](https://console.cloud.google.com/run/detail/us-central1/caching-app-service/security?) to enable this.
 
 You should have a fully working caching solution deployed on Google cloud with Memorystore for Valkey. Select the service URL to view your application.
 

@@ -10,6 +10,10 @@ Ensure the following setup is in place.
 
 You must have java installed locally on your machine. Run `java --version` to check if this is available.
 
+### Accessible Memorystore for Valkey instance
+
+Valkey-cli: [Download & Install](https://valkey.io/download/)
+
 ## Running the sample code
 
 Each example contains instructions on any prerequisite configuration.
