@@ -19,7 +19,6 @@ package app;
 import java.util.List;
 import org.json.JSONObject;
 
-
 /**
  * Response object containing leaderboard entries and cache status.
  */
@@ -31,16 +30,23 @@ public final class LeaderboardResponse {
   /** Indicates if the response was served from cache. */
   private final int fromCache;
 
+  /** Total number of results available. */
+  private final long totalCount;
+
   /**
    * Constructs a new leaderboard response.
    *
-   * @param newEntries   List of leaderboard entries
-   * @param newFromCache Cache status indicator
+   * @param newEntries    List of leaderboard entries
+   * @param newFromCache  Cache status indicator
+   * @param newTotalCount Total number of results available
    */
   public LeaderboardResponse(
-      final List<LeaderboardEntry> newEntries, final int newFromCache) {
+      final List<LeaderboardEntry> newEntries,
+      final int newFromCache,
+      final long newTotalCount) {
     this.entries = newEntries;
     this.fromCache = newFromCache;
+    this.totalCount = newTotalCount;
   }
 
   /**
@@ -62,6 +68,15 @@ public final class LeaderboardResponse {
   }
 
   /**
+   * Gets the total count of results.
+   *
+   * @return Total number of results available
+   */
+  public long getTotalCount() {
+    return totalCount;
+  }
+
+  /**
    * Converts the response to JSON format.
    *
    * @return JSONObject representation
@@ -70,6 +85,7 @@ public final class LeaderboardResponse {
     JSONObject json = new JSONObject();
     json.put("entries", entries);
     json.put("fromCache", fromCache);
+    json.put("totalCount", totalCount);
     return json;
   }
 }

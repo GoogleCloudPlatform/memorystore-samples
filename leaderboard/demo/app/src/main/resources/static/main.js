@@ -14,6 +14,36 @@
  * limitations under the License.
  */
 
+// Module-level logging
+const log = {
+  info: (...args) =>
+    console.log(
+      "%c[Leaderboard]",
+      "color: #2196F3; font-weight: bold",
+      ...args
+    ),
+  error: (...args) =>
+    console.error(
+      "%c[Leaderboard]",
+      "color: #F44336; font-weight: bold",
+      ...args
+    ),
+  warn: (...args) =>
+    console.warn(
+      "%c[Leaderboard]",
+      "color: #FF9800; font-weight: bold",
+      ...args
+    ),
+  debug: (...args) =>
+    console.debug(
+      "%c[Leaderboard]",
+      "color: #4CAF50; font-weight: bold",
+      ...args
+    ),
+};
+
+log.info("Module loaded");
+
 const PAGE_SIZE = 25;
 let currentPage = 0;
 let isLoading = false;
@@ -32,6 +62,7 @@ const elements = {
   addEntry: document.getElementById("add-entry"),
   fromCache: document.getElementById("from-cache"),
   timeToFetch: document.getElementById("time-to-fetch"),
+  totalResults: document.getElementById("total-results"),
 };
 
 // Event Listeners
@@ -57,39 +88,59 @@ async function fetchLeaderboard() {
       params.append("username", elements.search.value);
     }
 
+    log.debug("Fetching leaderboard", { params: Object.fromEntries(params) });
     const response = await fetch(`/api/leaderboard?${params}`);
     const data = await response.json();
+    log.debug("Received data", {
+      entries: data.entries?.length,
+      totalCount: data.totalCount,
+      fromCache: data.fromCache,
+      raw: data,
+    });
 
-    updateAnalytics(data.fromCache, Date.now() - startTime);
+    // Update analytics after we have the data
+    updateAnalytics(data.fromCache, Date.now() - startTime, data);
     return data;
   } catch (error) {
-    console.error("Fetch error:", error);
-    return { entries: [] };
+    log.error("Fetch error:", error);
+    return { entries: [], totalCount: 0 };
   } finally {
     isLoading = false;
   }
 }
 
-function updateAnalytics(cacheStatus, duration) {
-  // Ternary chain for cache status text
+function updateAnalytics(cacheStatus, duration, data) {
+  // Update leaderboardData first
+  if (data) {
+    leaderboardData = data;
+  }
+
+  // Then update UI elements
   elements.fromCache.textContent = cacheStatus ? "Yes" : "No";
   elements.timeToFetch.textContent = duration ? `${duration}ms` : "-";
+  elements.totalResults.textContent = leaderboardData?.totalCount ?? 0;
+
+  log.debug("Analytics updated", {
+    cacheStatus,
+    duration,
+    totalCount: leaderboardData?.totalCount,
+    leaderboardData,
+  });
 }
 
 async function refreshLeaderboard() {
   currentPage = 0;
-  updatePagination();
   const data = await fetchLeaderboard();
-  leaderboardData = data.entries;
+  updatePagination();
   renderEntries();
 }
 
 function renderEntries() {
   elements.entriesContainer.innerHTML = isLoading
     ? loadingTemplate()
-    : leaderboardData.length
-      ? entriesTemplate()
-      : emptyTemplate();
+    : leaderboardData?.entries?.length
+    ? entriesTemplate()
+    : emptyTemplate();
 }
 
 function loadingTemplate() {
@@ -104,17 +155,19 @@ function emptyTemplate() {
 function entriesTemplate() {
   return `
     <ul class="divide-y">
-      ${leaderboardData
+      ${leaderboardData.entries
         .map(
           (entry) => `
         <li class="py-3 hover:bg-gray-50">
           <div class="flex justify-between items-center">
             <span class="w-16">${entry.position + 1}.</span>
             <span class="flex-1">${entry.username}</span>
-            <span class="w-24 text-right font-mono text-blue-600">${entry.score}</span>
+            <span class="w-24 text-right font-mono text-blue-600">${
+              entry.score
+            }</span>
           </div>
         </li>
-      `,
+      `
         )
         .join("")}
     </ul>
@@ -126,11 +179,13 @@ async function addEntry() {
   const score = parseInt(elements.scoreInput.value);
 
   if (!username || isNaN(score)) {
+    log.warn("Invalid entry attempt", { username, score });
     alert("Please enter valid name and score");
     return;
   }
 
   try {
+    log.debug("Adding entry", { username, score });
     const response = await fetch("/api/leaderboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -138,36 +193,83 @@ async function addEntry() {
     });
 
     if (response.ok) {
+      log.info("Entry added successfully");
       elements.usernameInput.value = "";
       elements.scoreInput.value = "";
       refreshLeaderboard();
     }
   } catch (error) {
-    console.error("Submission error:", error);
+    log.error("Submission error:", error);
   }
 }
 
 function updatePagination() {
+  // Always use totalCount for pagination, regardless of filtering
+  const totalPages = Math.ceil((leaderboardData?.totalCount ?? 0) / PAGE_SIZE);
+
+  log.debug("Pagination update", {
+    totalCount: leaderboardData?.totalCount,
+    entriesCount: leaderboardData?.entries?.length,
+    pageSize: PAGE_SIZE,
+    totalPages,
+    currentPage,
+    isFiltering: elements.search.value.trim() !== "",
+  });
+
   elements.pageNumber.textContent = currentPage + 1;
+
+  // Disable previous button if on first page
   elements.prevPage.disabled = currentPage === 0;
+
+  // Disable next button if:
+  // 1. We have no entries OR
+  // 2. Current entries are less than page size (indicating it's the last page)
+  elements.nextPage.disabled =
+    !leaderboardData?.entries?.length ||
+    leaderboardData.entries.length < PAGE_SIZE;
 }
 
 async function nextPage() {
+  const totalPages = Math.ceil((leaderboardData?.totalCount ?? 0) / PAGE_SIZE);
+
+  log.debug("Next page check", {
+    currentPage,
+    totalPages,
+    totalCount: leaderboardData?.totalCount,
+    entriesCount: leaderboardData?.entries?.length,
+    canProceed:
+      currentPage < totalPages - 1 && leaderboardData?.entries?.length > 0,
+  });
+
+  if (currentPage >= totalPages - 1 || !leaderboardData?.entries?.length)
+    return;
   currentPage++;
   await loadPage();
 }
 
 async function previousPage() {
+  log.debug("Previous page check", {
+    currentPage,
+    canProceed: currentPage > 0,
+  });
+
+  if (currentPage === 0) return;
   currentPage = Math.max(0, currentPage - 1);
   await loadPage();
 }
 
 async function loadPage() {
+  log.debug("Loading page", {
+    currentPage,
+    pageSize: PAGE_SIZE,
+    isFiltering: elements.search.value.trim() !== "",
+  });
+
   const data = await fetchLeaderboard();
-  leaderboardData = data.entries;
   updatePagination();
   renderEntries();
 }
 
 // Initial load
+log.info("Starting initial leaderboard load");
 refreshLeaderboard();

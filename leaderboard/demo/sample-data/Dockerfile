@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,30 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Use an OpenJDK base image
-FROM openjdk:17-jdk-slim
+# Multi-stage build using Eclipse Temurin Java 21 LTS
+FROM eclipse-temurin:21-jdk AS builder
 
-# Install Maven for building the project
-RUN apt-get update && apt-get install -y maven
+# Install Maven
+RUN apt-get update && \
+    apt-get install -y maven && \
+    rm -rf /var/lib/apt/lists/*
 
-# Add a wait script for the database migration.
-RUN apt-get install -y wait-for-it
+# Set working directory
+WORKDIR /build
 
-# Set the working directory
-WORKDIR /app
-
-# Copy Maven project files
+# Copy Maven files for dependency caching
 COPY pom.xml ./
+# Download dependencies (cached if pom.xml hasn't changed)
+RUN mvn dependency:go-offline
+
+# Copy source code
 COPY src ./src
 
-# Build the project
+# Build the application
 RUN mvn clean package -DskipTests
 
-# Copy the built JAR file to the container
-RUN cp target/app-1.0-SNAPSHOT.jar app.jar
+# Runtime stage - using Alpine with ZERO vulnerabilities
+FROM eclipse-temurin:21-jre-alpine
 
-# Expose the application port
-EXPOSE 8080
+# Set working directory
+WORKDIR /app
 
-# Wait for Postgres to be ready, then run the application
-CMD ["wait-for-it", "postgres:5432", "--", "java", "-jar", "app.jar"]
+# Copy the JAR from builder stage
+COPY --from=builder /build/target/app-1.0-SNAPSHOT.jar app.jar
+
+# Run the seeding application
+ENTRYPOINT ["java", "-jar", "app.jar"]

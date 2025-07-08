@@ -137,6 +137,18 @@ CREATE TABLE IF NOT EXISTS items (
 
 You should have a fully working caching solution deployed on Google cloud with Memorystore for Valkey. Select the service URL to view your application.
 
+### Troubleshooting
+
+### Error: Permission Denied on init.sql
+
+If you see a `Permission denied error` when initializing the database (e.g. in Docker logs for postgres), it may be caused by restricted file permissions on your host machine.
+
+Ensure the init.sql file is readable by all users:
+
+```bash
+chmod 644 ./app/init.sql
+```
+
 ### Endpoints
 
 - `GET /item/{id}`: Get an item by ID

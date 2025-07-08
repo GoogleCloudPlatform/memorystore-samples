@@ -97,14 +97,14 @@
           <div class="flex items-center gap-4">
             <button
               id="prev-page"
-              class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200"
+              class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:hover:bg-gray-100"
             >
               ←
             </button>
             <span>Page <span id="page-number">1</span></span>
             <button
               id="next-page"
-              class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200"
+              class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:hover:bg-gray-100"
             >
               →
             </button>
@@ -113,9 +113,8 @@
           <!-- Analytics -->
           <div class="flex items-center gap-4 text-sm text-gray-600">
             <span>Cache: <span id="from-cache" class="font-bold">-</span></span>
-            <span
-              >Fetch: <span id="time-to-fetch" class="font-bold">-</span></span
-            >
+            <span>Fetch: <span id="time-to-fetch" class="font-bold">-</span></span>
+            <span>Total: <span id="total-results" class="font-bold">-</span></span>
           </div>
         </div>
       </div>

@@ -17,13 +17,19 @@ name: leaderboard-app
 services:
   valkey:
     image: valkey/valkey:latest
+    container_name: leaderboard-valkey
     ports:
       - "6379:6379"
     command: ["valkey-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-  leaderboard_postgres:
+  postgres:
     image: postgres:latest
-    container_name: leaderboard_postgres
+    container_name: leaderboard-postgres
     ports:
       - "5432:5432"
     environment:
@@ -32,20 +38,27 @@ services:
       - POSTGRES_DB=postgres
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: java-app
+    container_name: leaderboard-app
     ports:
       - "8080:8080"
     depends_on:
-      - valkey
-      - leaderboard_postgres
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
     environment:
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
-      - DB_URL=jdbc:postgresql://leaderboard_postgres:5432/postgres
+      - DB_URL=jdbc:postgresql://postgres:5432/postgres
       - DB_USERNAME=admin
       - DB_PASSWORD=password

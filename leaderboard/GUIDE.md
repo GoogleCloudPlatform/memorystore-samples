@@ -12,7 +12,7 @@ This guide explains how to create a scalable leaderboard system using Spring Boo
 
 ## Before Getting started
 
-Some aspects of this guide will require a running instance of MemoryStore for Valkey.
+Some aspects of this guide will require a running instance of Memorystore for Valkey.
 
 ### Local development
 

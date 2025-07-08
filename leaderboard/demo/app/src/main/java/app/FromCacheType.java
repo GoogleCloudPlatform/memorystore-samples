@@ -39,8 +39,8 @@ public enum FromCacheType {
    * Gets the numeric value.
    *
    * @return The source of the data that has been returned.
-   * A database source will return 0. 
-   * A caching source will return 1. 
+   *         A database source will return 0.
+   *         A caching source will return 1.
    */
   public int getValue() {
     return value;

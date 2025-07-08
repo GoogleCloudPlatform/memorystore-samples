@@ -12,7 +12,7 @@ This guide outlines how to create a session management system using Spring Boot,
 
 ## Before Getting started
 
-Some aspects of this guide will require a running instance of MemoryStore for Valkey.
+Some aspects of this guide will require a running instance of Memorystore for Valkey.
 
 ### Local development
 

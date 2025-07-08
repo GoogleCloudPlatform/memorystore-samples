@@ -11,7 +11,7 @@ In this guide, there are architectural concepts and deployment steps for creatin
 
 ## Before Getting started
 
-Some aspects of this guide will require a running instance of MemoryStore for Valkey.
+Some aspects of this guide will require a running instance of Memorystore for Valkey.
 
 ### Local development
 

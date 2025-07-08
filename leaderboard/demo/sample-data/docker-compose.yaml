@@ -15,52 +15,75 @@
 name: leaderboard-app-with-data
 
 services:
-  valkey:
-    image: valkey/valkey:latest
-    ports:
-      - "6379:6379"
-    command: ["valkey-server", "--save", "60", "1", "--loglevel", "warning"]
+ valkey:
+   image: valkey/valkey:latest
+   container_name: leaderboard-valkey
+   ports:
+     - "6379:6379"
+   command: ["valkey-server", "--save", "60", "1", "--loglevel", "warning"]
+   healthcheck:
+     test: ["CMD", "valkey-cli", "ping"]
+     interval: 5s
+     timeout: 3s
+     retries: 5
 
-  leaderboard_postgres_with_data:
-    image: postgres:latest
-    container_name: leaderboard_postgres_with_data
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=postgres
-    volumes:
-      - ../app/init.sql:/docker-entrypoint-initdb.d/init.sql
+ postgres:
+   image: postgres:latest
+   container_name: leaderboard-postgres-sample-data
+   ports:
+     - "5432:5432"
+   environment:
+     - POSTGRES_USER=admin
+     - POSTGRES_PASSWORD=password
+     - POSTGRES_DB=postgres
+   volumes:
+     - ../app/init.sql:/docker-entrypoint-initdb.d/init.sql
+   healthcheck:
+     test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+     interval: 5s
+     timeout: 5s
+     retries: 5
 
-  leaderboard_sample-data:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: leaderboard_sample-data
-    ports:
-      - "8081:8081"
-    depends_on:
-      - leaderboard_postgres_with_data
-    environment:
-      - DB_URL=jdbc:postgresql://leaderboard_postgres_with_data:5432/postgres
-      - DB_USERNAME=admin
-      - DB_PASSWORD=password
+ seed-data:
+   build:
+     context: .
+     dockerfile: Dockerfile
+   container_name: leaderboard-seed-data
+   depends_on:
+     postgres:
+       condition: service_healthy
+   environment:
+     - DB_URL=jdbc:postgresql://leaderboard-postgres-sample-data:5432/postgres
+     - DB_USERNAME=admin
+     - DB_PASSWORD=password
+   # Runs once and exits
+   restart: "no"
+   # Remove the container after it exits for clean re-runs
+   labels:
+     - "com.docker.compose.oneshot=true"
 
-  app_leaderboard:
-    build:
-      context: ../app
-      dockerfile: Dockerfile
-    container_name: app_leaderboard
-    ports:
-      - "8080:8080"
-    depends_on:
-      - valkey
-      - leaderboard_postgres_with_data
-      - leaderboard_sample-data
-    environment:
-      - VALKEY_HOST=valkey
-      - VALKEY_PORT=6379
-      - DB_URL=jdbc:postgresql://leaderboard_postgres_with_data:5432/postgres
-      - DB_USERNAME=admin
-      - DB_PASSWORD=password
+ app:
+   build:
+     context: ../app
+     dockerfile: Dockerfile
+   container_name: leaderboard-app
+   ports:
+     - "8080:8080"
+   depends_on:
+     postgres:
+       condition: service_healthy
+     valkey:
+       condition: service_healthy
+     # Note: NOT depending on seed-data
+   environment:
+     - VALKEY_HOST=valkey
+     - VALKEY_PORT=6379
+     - DB_URL=jdbc:postgresql://leaderboard-postgres-sample-data:5432/postgres
+     - DB_USERNAME=admin
+     - DB_PASSWORD=password
+   healthcheck:
+     test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+     interval: 30s
+     timeout: 10s
+     retries: 3
+     start_period: 40s
