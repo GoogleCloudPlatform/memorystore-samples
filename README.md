@@ -10,7 +10,7 @@ Each sample application is in it's own subdirectory and contains it's own docume
 ### Directory Structure
 Inside each application's main directory, you'll find subdirectories organized by programming language (e.g., java/, python/). Each language-specific directory contains:
 - A GUIDE.md file: This provides a high-level overview of the sample application and what it demonstrates.
-- **sample-app** directory: This contains the full demo application. Its README.md file has detailed instructions on how to build and run the app, showing you how Memorystore works in a real-world context.
+- **sample-demo-app** directory: This contains the full demo application. Its README.md file has detailed instructions on how to build and run the app, showing you how Memorystore works in a real-world context.
 - **memorystore-code-snippets** directory: This folder contains isolated code snippets. These examples show you exactly how to connect to a Memorystore instance and perform basic operations, making it easy to integrate into your own projects.
 
 ## About Google Cloud Memorystore
