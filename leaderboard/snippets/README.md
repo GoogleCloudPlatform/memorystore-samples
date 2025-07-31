@@ -1,4 +1,4 @@
-# Caching Samples
+# Samples
 
 This folder contains samples in the form of stand-alone snippets that demonstrate useful scenarios.
 
