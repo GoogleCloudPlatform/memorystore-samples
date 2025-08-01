@@ -5,7 +5,13 @@ This project is intended for demonstration purposes only. It is not
 intended for use in a production environment.
 
 ## How to use
-Each sample application is in it's own subdirectory and contains it's own documentation.
+Each sample application is in it's own subdirectory and contains it's own documentation. 
+
+### Directory Structure
+Inside each application's main directory, you'll find subdirectories organized by programming language (e.g., java/, python/). Each language-specific directory contains:
+- A GUIDE.md file: This provides a high-level overview of the sample application and what it demonstrates.
+- **sample-demo-app** directory: This contains the full demo application. Its README.md file has detailed instructions on how to build and run the app, showing you how Memorystore works in a real-world context.
+- **memorystore-code-snippets** directory: This folder contains isolated code snippets. These examples show you exactly how to connect to a Memorystore instance and perform basic operations, making it easy to integrate into your own projects.
 
 ## About Google Cloud Memorystore
 [Google Cloud Memorystore](https://cloud.google.com/memorystore) is a fully managed in-memory Valkey, Redis[^redis] and Memcached service that offers sub millisecond data access, scalability, and high availability for a wide range of applications. 
