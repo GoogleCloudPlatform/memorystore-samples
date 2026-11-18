@@ -17,6 +17,7 @@
 package app;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,6 +29,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -40,35 +42,101 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import redis.clients.jedis.ConnectionPoolConfig;
+import redis.clients.jedis.JedisClientConfig;
 import redis.clients.jedis.JedisPooled;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
-/** Unit and concurrency tests for {@link JedisConfig}. */
+/** Unit, timeout, TLS, Secret Manager, and concurrency tests for {@link JedisConfig}. */
 class JedisConfigTest {
 
-  @Test
-  @DisplayName("Rejects missing host or out-of-range port")
-  void rejectsInvalidConfiguration() {
-    JedisConfig missingHost = new JedisConfig();
-    ReflectionTestUtils.setField(missingHost, "redisHost", "");
-    ReflectionTestUtils.setField(missingHost, "redisPort", 6379);
-    ReflectionTestUtils.setField(missingHost, "redisPassword", "");
-    assertThrows(IllegalArgumentException.class, missingHost::jedis);
-
-    JedisConfig invalidPort = new JedisConfig();
-    ReflectionTestUtils.setField(invalidPort, "redisHost", "127.0.0.1");
-    ReflectionTestUtils.setField(invalidPort, "redisPort", 70000);
-    ReflectionTestUtils.setField(invalidPort, "redisPassword", "");
-    assertThrows(IllegalArgumentException.class, invalidPort::jedis);
+  private static JedisConfig newBaseConfig(final String secretValue) {
+    JedisConfig config =
+        new JedisConfig() {
+          @Override
+          String fetchSecretPayload(final String secretVersionResource) {
+            return secretValue;
+          }
+        };
+    ReflectionTestUtils.setField(config, "redisHost", "127.0.0.1");
+    ReflectionTestUtils.setField(config, "redisPort", 6379);
+    ReflectionTestUtils.setField(config, "redisUseTls", false);
+    ReflectionTestUtils.setField(config, "connectTimeoutMs", 2000);
+    ReflectionTestUtils.setField(config, "socketTimeoutMs", 2000);
+    ReflectionTestUtils.setField(config, "poolMaxWaitMs", 2000L);
+    ReflectionTestUtils.setField(config, "redisPasswordSecret", "");
+    ReflectionTestUtils.setField(config, "projectId", "");
+    return config;
   }
 
   @Test
-  @DisplayName("Authenticates pooled connections and isolates concurrent requests across sockets")
+  @DisplayName("Rejects missing host, out-of-range port, or non-positive timeouts")
+  void rejectsInvalidConfiguration() {
+    JedisConfig missingHost = newBaseConfig("");
+    ReflectionTestUtils.setField(missingHost, "redisHost", " ");
+    assertThrows(IllegalArgumentException.class, missingHost::jedis);
+
+    JedisConfig invalidPort = newBaseConfig("");
+    ReflectionTestUtils.setField(invalidPort, "redisPort", 70000);
+    assertThrows(IllegalArgumentException.class, invalidPort::jedis);
+
+    JedisConfig badConnectTimeout = newBaseConfig("");
+    ReflectionTestUtils.setField(badConnectTimeout, "connectTimeoutMs", 0);
+    assertThrows(IllegalArgumentException.class, badConnectTimeout::buildClientConfig);
+
+    JedisConfig badSocketTimeout = newBaseConfig("");
+    ReflectionTestUtils.setField(badSocketTimeout, "socketTimeoutMs", -1);
+    assertThrows(IllegalArgumentException.class, badSocketTimeout::buildClientConfig);
+
+    JedisConfig badPoolWait = newBaseConfig("");
+    ReflectionTestUtils.setField(badPoolWait, "poolMaxWaitMs", 0L);
+    assertThrows(IllegalArgumentException.class, badPoolWait::buildPoolConfig);
+  }
+
+  @Test
+  @DisplayName("Configures TLS, explicit client/pool timeouts, and Secret Manager resource names")
+  void configuresTlsTimeoutsAndSecretManager() {
+    JedisConfig config = newBaseConfig("from-secret-manager");
+    ReflectionTestUtils.setField(config, "redisUseTls", true);
+    ReflectionTestUtils.setField(config, "connectTimeoutMs", 1500);
+    ReflectionTestUtils.setField(config, "socketTimeoutMs", 2500);
+    ReflectionTestUtils.setField(config, "poolMaxWaitMs", 1200L);
+    ReflectionTestUtils.setField(config, "redisPasswordSecret", "valkey-password");
+    ReflectionTestUtils.setField(config, "projectId", "demo-project");
+
+    JedisClientConfig clientConfig = config.buildClientConfig();
+    assertTrue(clientConfig.isSsl());
+    assertEquals(1500, clientConfig.getConnectionTimeoutMillis());
+    assertEquals(2500, clientConfig.getSocketTimeoutMillis());
+    assertEquals("from-secret-manager", clientConfig.getPassword());
+
+    ConnectionPoolConfig poolConfig = config.buildPoolConfig();
+    assertTrue(poolConfig.getBlockWhenExhausted());
+    assertEquals(Duration.ofMillis(1200), poolConfig.getMaxWaitDuration());
+    assertFalse(poolConfig.getJmxEnabled());
+
+    assertEquals(
+        "projects/p1/secrets/s1/versions/3",
+        JedisConfig.normalizeSecretVersionResource("projects/p1/secrets/s1/versions/3", ""));
+    assertEquals(
+        "projects/p1/secrets/s1/versions/latest",
+        JedisConfig.normalizeSecretVersionResource("projects/p1/secrets/s1", ""));
+    assertEquals(
+        "projects/demo/secrets/valkey-pw/versions/latest",
+        JedisConfig.normalizeSecretVersionResource("valkey-pw", "demo"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> JedisConfig.normalizeSecretVersionResource("short-secret-id", ""));
+  }
+
+  @Test
+  @DisplayName("Authenticates via Secret Manager and isolates concurrent requests across sockets")
   void isolatesConcurrentRequestsAcrossPooledConnections() throws Exception {
-    try (MiniRespServer server = new MiniRespServer("s3cr3t")) {
-      JedisConfig config = new JedisConfig();
-      ReflectionTestUtils.setField(config, "redisHost", "127.0.0.1");
+    try (MiniRespServer server = new MiniRespServer("s3cr3t", 10)) {
+      JedisConfig config = newBaseConfig("s3cr3t");
       ReflectionTestUtils.setField(config, "redisPort", server.port());
-      ReflectionTestUtils.setField(config, "redisPassword", "s3cr3t");
+      ReflectionTestUtils.setField(
+          config, "redisPasswordSecret", "projects/demo/secrets/valkey-auth/versions/latest");
 
       int threadCount = 12;
       ExecutorService executor = Executors.newFixedThreadPool(threadCount);
@@ -97,15 +165,31 @@ class JedisConfigTest {
     }
   }
 
+  @Test
+  @DisplayName("Enforces socket timeout when Valkey backend stalls")
+  void enforcesSocketTimeoutOnStalledBackend() throws Exception {
+    try (MiniRespServer stalledServer = new MiniRespServer("", 800)) {
+      JedisConfig config = newBaseConfig("");
+      ReflectionTestUtils.setField(config, "redisPort", stalledServer.port());
+      ReflectionTestUtils.setField(config, "socketTimeoutMs", 120);
+
+      try (JedisPooled pooled = config.jedis()) {
+        assertThrows(JedisConnectionException.class, () -> pooled.get("slow-key"));
+      }
+    }
+  }
+
   private static final class MiniRespServer implements AutoCloseable {
     private final String expectedPassword;
+    private final long getDelayMs;
     private final ServerSocket serverSocket;
     private final ExecutorService clientPool = Executors.newCachedThreadPool();
     private final AtomicInteger accepted = new AtomicInteger();
     private final AtomicInteger authenticated = new AtomicInteger();
 
-    MiniRespServer(final String expectedPassword) throws IOException {
+    MiniRespServer(final String expectedPassword, final long getDelayMs) throws IOException {
       this.expectedPassword = expectedPassword;
+      this.getDelayMs = getDelayMs;
       this.serverSocket = new ServerSocket(0, 50, InetAddress.getLoopbackAddress());
       clientPool.execute(this::acceptLoop);
     }
@@ -152,7 +236,7 @@ class JedisConfigTest {
           } else if ("PING".equals(op)) {
             out.write("+PONG\r\n".getBytes(StandardCharsets.UTF_8));
           } else if ("GET".equals(op)) {
-            Thread.sleep(10);
+            Thread.sleep(getDelayMs);
             String payload = "val:" + cmd.get(1);
             byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
             String header = "$" + bytes.length + "\r\n";

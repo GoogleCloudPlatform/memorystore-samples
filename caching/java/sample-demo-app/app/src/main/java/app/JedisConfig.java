@@ -16,6 +16,10 @@
 
 package app;
 
+import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
+import com.google.cloud.secretmanager.v1.SecretVersionName;
+import java.io.IOException;
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,8 +44,23 @@ public class JedisConfig {
   @Value("${VALKEY_PORT:6379}")
   private int redisPort;
 
-  @Value("${VALKEY_PASSWORD:}")
-  private String redisPassword;
+  @Value("${VALKEY_USE_TLS:${VALKEY_SSL:false}}")
+  private boolean redisUseTls;
+
+  @Value("${VALKEY_CONNECT_TIMEOUT_MS:2000}")
+  private int connectTimeoutMs;
+
+  @Value("${VALKEY_SOCKET_TIMEOUT_MS:2000}")
+  private int socketTimeoutMs;
+
+  @Value("${VALKEY_POOL_MAX_WAIT_MS:2000}")
+  private long poolMaxWaitMs;
+
+  @Value("${VALKEY_PASSWORD_SECRET:}")
+  private String redisPasswordSecret;
+
+  @Value("${GOOGLE_CLOUD_PROJECT:}")
+  private String projectId;
 
   /**
    * Creates and verifies a thread-safe {@link JedisPooled} client instance.
@@ -50,26 +69,18 @@ public class JedisConfig {
    */
   @Bean(destroyMethod = "close")
   public JedisPooled jedis() {
-    if (redisHost == null || redisHost.isEmpty()) {
+    if (redisHost == null || redisHost.isBlank()) {
       throw new IllegalArgumentException("Redis host (VALKEY_HOST) is not configured");
     }
     if (redisPort <= 0 || redisPort > MAX_PORT) {
       throw new IllegalArgumentException("Redis port (VALKEY_PORT) is invalid");
     }
 
-    DefaultJedisClientConfig.Builder configBuilder = DefaultJedisClientConfig.builder();
-    if (redisPassword != null && !redisPassword.isEmpty()) {
-      configBuilder.password(redisPassword);
-    }
-    JedisClientConfig clientConfig = configBuilder.build();
-
-    ConnectionPoolConfig poolConfig = new ConnectionPoolConfig();
-    poolConfig.setMaxTotal(DEFAULT_MAX_TOTAL_CONNECTIONS);
-    poolConfig.setMaxIdle(DEFAULT_MAX_IDLE_CONNECTIONS);
-    poolConfig.setJmxEnabled(false);
+    JedisClientConfig clientConfig = buildClientConfig();
+    ConnectionPoolConfig poolConfig = buildPoolConfig();
 
     JedisPooled jedis =
-        new JedisPooled(new HostAndPort(redisHost, redisPort), clientConfig, poolConfig);
+        new JedisPooled(new HostAndPort(redisHost.trim(), redisPort), clientConfig, poolConfig);
 
     try {
       jedis.sendCommand(Protocol.Command.PING);
@@ -80,5 +91,70 @@ public class JedisConfig {
     }
 
     return jedis;
+  }
+
+  JedisClientConfig buildClientConfig() {
+    if (connectTimeoutMs <= 0) {
+      throw new IllegalArgumentException("VALKEY_CONNECT_TIMEOUT_MS must be positive");
+    }
+    if (socketTimeoutMs <= 0) {
+      throw new IllegalArgumentException("VALKEY_SOCKET_TIMEOUT_MS must be positive");
+    }
+
+    DefaultJedisClientConfig.Builder builder =
+        DefaultJedisClientConfig.builder()
+            .connectionTimeoutMillis(connectTimeoutMs)
+            .socketTimeoutMillis(socketTimeoutMs)
+            .ssl(redisUseTls);
+
+    if (redisPasswordSecret != null && !redisPasswordSecret.isBlank()) {
+      String versionResource = normalizeSecretVersionResource(redisPasswordSecret, projectId);
+      String password = fetchSecretPayload(versionResource);
+      if (!password.isEmpty()) {
+        builder.password(password);
+      }
+    }
+
+    return builder.build();
+  }
+
+  ConnectionPoolConfig buildPoolConfig() {
+    if (poolMaxWaitMs <= 0) {
+      throw new IllegalArgumentException("VALKEY_POOL_MAX_WAIT_MS must be positive");
+    }
+
+    ConnectionPoolConfig poolConfig = new ConnectionPoolConfig();
+    poolConfig.setMaxTotal(DEFAULT_MAX_TOTAL_CONNECTIONS);
+    poolConfig.setMaxIdle(DEFAULT_MAX_IDLE_CONNECTIONS);
+    poolConfig.setBlockWhenExhausted(true);
+    poolConfig.setMaxWait(Duration.ofMillis(poolMaxWaitMs));
+    poolConfig.setJmxEnabled(false);
+    return poolConfig;
+  }
+
+  static String normalizeSecretVersionResource(
+      final String secretRef, final String defaultProjectId) {
+    String trimmed = secretRef.trim();
+    if (trimmed.startsWith("projects/")) {
+      if (trimmed.contains("/versions/")) {
+        return trimmed;
+      }
+      return trimmed + "/versions/latest";
+    }
+    if (defaultProjectId == null || defaultProjectId.isBlank()) {
+      throw new IllegalArgumentException(
+          "VALKEY_PASSWORD_SECRET must be a full projects/*/secrets/*/versions/* resource name "
+              + "or GOOGLE_CLOUD_PROJECT must be set");
+    }
+    return SecretVersionName.of(defaultProjectId.trim(), trimmed, "latest").toString();
+  }
+
+  String fetchSecretPayload(final String secretVersionResource) {
+    try (SecretManagerServiceClient client = SecretManagerServiceClient.create()) {
+      return client.accessSecretVersion(secretVersionResource).getPayload().getData().toStringUtf8();
+    } catch (IOException e) {
+      throw new IllegalStateException(
+          "Failed to initialize Secret Manager client for VALKEY_PASSWORD_SECRET", e);
+    }
   }
 }
