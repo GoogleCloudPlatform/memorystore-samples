@@ -47,7 +47,7 @@ import redis.clients.jedis.JedisClientConfig;
 import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
-/** Unit, timeout, TLS, Secret Manager, and concurrency tests for {@link JedisConfig}. */
+/** Unit, timeout, pool-limit, TLS, Secret Manager, and concurrency tests for {@link JedisConfig}. */
 class JedisConfigTest {
 
   private static JedisConfig newBaseConfig(final String secretValue) {
@@ -63,14 +63,18 @@ class JedisConfigTest {
     ReflectionTestUtils.setField(config, "redisUseTls", false);
     ReflectionTestUtils.setField(config, "connectTimeoutMs", 2000);
     ReflectionTestUtils.setField(config, "socketTimeoutMs", 2000);
+    ReflectionTestUtils.setField(config, "poolMaxTotal", 16);
+    ReflectionTestUtils.setField(config, "poolMaxIdle", 8);
+    ReflectionTestUtils.setField(config, "poolMinIdle", 0);
     ReflectionTestUtils.setField(config, "poolMaxWaitMs", 2000L);
     ReflectionTestUtils.setField(config, "redisPasswordSecret", "");
+    ReflectionTestUtils.setField(config, "redisPassword", "");
     ReflectionTestUtils.setField(config, "projectId", "");
     return config;
   }
 
   @Test
-  @DisplayName("Rejects missing host, out-of-range port, or non-positive timeouts")
+  @DisplayName("Rejects invalid host, port, timeout, or pool limit configuration")
   void rejectsInvalidConfiguration() {
     JedisConfig missingHost = newBaseConfig("");
     ReflectionTestUtils.setField(missingHost, "redisHost", " ");
@@ -88,32 +92,63 @@ class JedisConfigTest {
     ReflectionTestUtils.setField(badSocketTimeout, "socketTimeoutMs", -1);
     assertThrows(IllegalArgumentException.class, badSocketTimeout::buildClientConfig);
 
+    JedisConfig badMaxTotal = newBaseConfig("");
+    ReflectionTestUtils.setField(badMaxTotal, "poolMaxTotal", 0);
+    assertThrows(IllegalArgumentException.class, badMaxTotal::buildPoolConfig);
+
+    JedisConfig badMaxIdle = newBaseConfig("");
+    ReflectionTestUtils.setField(badMaxIdle, "poolMaxTotal", 8);
+    ReflectionTestUtils.setField(badMaxIdle, "poolMaxIdle", 16);
+    assertThrows(IllegalArgumentException.class, badMaxIdle::buildPoolConfig);
+
+    JedisConfig badMinIdle = newBaseConfig("");
+    ReflectionTestUtils.setField(badMinIdle, "poolMaxIdle", 4);
+    ReflectionTestUtils.setField(badMinIdle, "poolMinIdle", 5);
+    assertThrows(IllegalArgumentException.class, badMinIdle::buildPoolConfig);
+
     JedisConfig badPoolWait = newBaseConfig("");
     ReflectionTestUtils.setField(badPoolWait, "poolMaxWaitMs", 0L);
     assertThrows(IllegalArgumentException.class, badPoolWait::buildPoolConfig);
   }
 
   @Test
-  @DisplayName("Configures TLS, explicit client/pool timeouts, and Secret Manager resource names")
-  void configuresTlsTimeoutsAndSecretManager() {
-    JedisConfig config = newBaseConfig("from-secret-manager");
-    ReflectionTestUtils.setField(config, "redisUseTls", true);
-    ReflectionTestUtils.setField(config, "connectTimeoutMs", 1500);
-    ReflectionTestUtils.setField(config, "socketTimeoutMs", 2500);
-    ReflectionTestUtils.setField(config, "poolMaxWaitMs", 1200L);
-    ReflectionTestUtils.setField(config, "redisPasswordSecret", "valkey-password");
-    ReflectionTestUtils.setField(config, "projectId", "demo-project");
+  @DisplayName("Configures TLS, timeouts, custom pool limits, Secret Manager, and env fallback")
+  void configuresTlsTimeoutsPoolLimitsAndAuthPrecedence() {
+    JedisConfig secretConfig = newBaseConfig("from-secret-manager");
+    ReflectionTestUtils.setField(secretConfig, "redisUseTls", true);
+    ReflectionTestUtils.setField(secretConfig, "connectTimeoutMs", 1500);
+    ReflectionTestUtils.setField(secretConfig, "socketTimeoutMs", 2500);
+    ReflectionTestUtils.setField(secretConfig, "poolMaxTotal", 32);
+    ReflectionTestUtils.setField(secretConfig, "poolMaxIdle", 12);
+    ReflectionTestUtils.setField(secretConfig, "poolMinIdle", 4);
+    ReflectionTestUtils.setField(secretConfig, "poolMaxWaitMs", 1200L);
+    ReflectionTestUtils.setField(secretConfig, "redisPasswordSecret", "valkey-password");
+    ReflectionTestUtils.setField(secretConfig, "redisPassword", "local-env-password");
+    ReflectionTestUtils.setField(secretConfig, "projectId", "demo-project");
 
-    JedisClientConfig clientConfig = config.buildClientConfig();
+    JedisClientConfig clientConfig = secretConfig.buildClientConfig();
     assertTrue(clientConfig.isSsl());
     assertEquals(1500, clientConfig.getConnectionTimeoutMillis());
     assertEquals(2500, clientConfig.getSocketTimeoutMillis());
     assertEquals("from-secret-manager", clientConfig.getPassword());
 
-    ConnectionPoolConfig poolConfig = config.buildPoolConfig();
+    ConnectionPoolConfig poolConfig = secretConfig.buildPoolConfig();
+    assertEquals(32, poolConfig.getMaxTotal());
+    assertEquals(12, poolConfig.getMaxIdle());
+    assertEquals(4, poolConfig.getMinIdle());
     assertTrue(poolConfig.getBlockWhenExhausted());
     assertEquals(Duration.ofMillis(1200), poolConfig.getMaxWaitDuration());
     assertFalse(poolConfig.getJmxEnabled());
+
+    JedisConfig localEnvConfig = new JedisConfig();
+    ReflectionTestUtils.setField(localEnvConfig, "redisHost", "127.0.0.1");
+    ReflectionTestUtils.setField(localEnvConfig, "redisPort", 6379);
+    ReflectionTestUtils.setField(localEnvConfig, "redisUseTls", false);
+    ReflectionTestUtils.setField(localEnvConfig, "connectTimeoutMs", 2000);
+    ReflectionTestUtils.setField(localEnvConfig, "socketTimeoutMs", 2000);
+    ReflectionTestUtils.setField(localEnvConfig, "redisPasswordSecret", "");
+    ReflectionTestUtils.setField(localEnvConfig, "redisPassword", "local-dev-only");
+    assertEquals("local-dev-only", localEnvConfig.buildClientConfig().getPassword());
 
     assertEquals(
         "projects/p1/secrets/s1/versions/3",
@@ -130,13 +165,21 @@ class JedisConfigTest {
   }
 
   @Test
-  @DisplayName("Authenticates via Secret Manager and isolates concurrent requests across sockets")
+  @DisplayName("Authenticates and isolates concurrent requests across pooled sockets")
   void isolatesConcurrentRequestsAcrossPooledConnections() throws Exception {
     try (MiniRespServer server = new MiniRespServer("s3cr3t", 10)) {
-      JedisConfig config = newBaseConfig("s3cr3t");
+      JedisConfig config = new JedisConfig();
+      ReflectionTestUtils.setField(config, "redisHost", "127.0.0.1");
       ReflectionTestUtils.setField(config, "redisPort", server.port());
-      ReflectionTestUtils.setField(
-          config, "redisPasswordSecret", "projects/demo/secrets/valkey-auth/versions/latest");
+      ReflectionTestUtils.setField(config, "redisUseTls", false);
+      ReflectionTestUtils.setField(config, "connectTimeoutMs", 2000);
+      ReflectionTestUtils.setField(config, "socketTimeoutMs", 2000);
+      ReflectionTestUtils.setField(config, "poolMaxTotal", 16);
+      ReflectionTestUtils.setField(config, "poolMaxIdle", 8);
+      ReflectionTestUtils.setField(config, "poolMinIdle", 0);
+      ReflectionTestUtils.setField(config, "poolMaxWaitMs", 2000L);
+      ReflectionTestUtils.setField(config, "redisPasswordSecret", "");
+      ReflectionTestUtils.setField(config, "redisPassword", "s3cr3t");
 
       int threadCount = 12;
       ExecutorService executor = Executors.newFixedThreadPool(threadCount);

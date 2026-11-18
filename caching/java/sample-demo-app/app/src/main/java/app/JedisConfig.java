@@ -20,6 +20,8 @@ import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
 import com.google.cloud.secretmanager.v1.SecretVersionName;
 import java.io.IOException;
 import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,9 +36,8 @@ import redis.clients.jedis.Protocol;
 @Configuration
 public class JedisConfig {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(JedisConfig.class);
   private static final int MAX_PORT = 65535;
-  private static final int DEFAULT_MAX_TOTAL_CONNECTIONS = 16;
-  private static final int DEFAULT_MAX_IDLE_CONNECTIONS = 8;
 
   @Value("${VALKEY_HOST:localhost}")
   private String redisHost;
@@ -53,11 +54,23 @@ public class JedisConfig {
   @Value("${VALKEY_SOCKET_TIMEOUT_MS:2000}")
   private int socketTimeoutMs;
 
+  @Value("${VALKEY_POOL_MAX_TOTAL:16}")
+  private int poolMaxTotal;
+
+  @Value("${VALKEY_POOL_MAX_IDLE:8}")
+  private int poolMaxIdle;
+
+  @Value("${VALKEY_POOL_MIN_IDLE:0}")
+  private int poolMinIdle;
+
   @Value("${VALKEY_POOL_MAX_WAIT_MS:2000}")
   private long poolMaxWaitMs;
 
   @Value("${VALKEY_PASSWORD_SECRET:}")
   private String redisPasswordSecret;
+
+  @Value("${VALKEY_PASSWORD:}")
+  private String redisPassword;
 
   @Value("${GOOGLE_CLOUD_PROJECT:}")
   private String projectId;
@@ -107,25 +120,48 @@ public class JedisConfig {
             .socketTimeoutMillis(socketTimeoutMs)
             .ssl(redisUseTls);
 
-    if (redisPasswordSecret != null && !redisPasswordSecret.isBlank()) {
-      String versionResource = normalizeSecretVersionResource(redisPasswordSecret, projectId);
-      String password = fetchSecretPayload(versionResource);
-      if (!password.isEmpty()) {
-        builder.password(password);
-      }
+    String resolvedPassword = resolvePassword();
+    if (resolvedPassword != null && !resolvedPassword.isEmpty()) {
+      builder.password(resolvedPassword);
     }
 
     return builder.build();
   }
 
+  private String resolvePassword() {
+    if (redisPasswordSecret != null && !redisPasswordSecret.isBlank()) {
+      String versionResource = normalizeSecretVersionResource(redisPasswordSecret, projectId);
+      return fetchSecretPayload(versionResource);
+    }
+    if (redisPassword != null && !redisPassword.isEmpty()) {
+      LOGGER.warn(
+          "Using VALKEY_PASSWORD from environment; prefer VALKEY_PASSWORD_SECRET "
+              + "(Secret Manager) outside local development.");
+      return redisPassword;
+    }
+    return "";
+  }
+
   ConnectionPoolConfig buildPoolConfig() {
+    if (poolMaxTotal <= 0) {
+      throw new IllegalArgumentException("VALKEY_POOL_MAX_TOTAL must be positive");
+    }
+    if (poolMaxIdle < 0 || poolMaxIdle > poolMaxTotal) {
+      throw new IllegalArgumentException(
+          "VALKEY_POOL_MAX_IDLE must be between 0 and VALKEY_POOL_MAX_TOTAL");
+    }
+    if (poolMinIdle < 0 || poolMinIdle > poolMaxIdle) {
+      throw new IllegalArgumentException(
+          "VALKEY_POOL_MIN_IDLE must be between 0 and VALKEY_POOL_MAX_IDLE");
+    }
     if (poolMaxWaitMs <= 0) {
       throw new IllegalArgumentException("VALKEY_POOL_MAX_WAIT_MS must be positive");
     }
 
     ConnectionPoolConfig poolConfig = new ConnectionPoolConfig();
-    poolConfig.setMaxTotal(DEFAULT_MAX_TOTAL_CONNECTIONS);
-    poolConfig.setMaxIdle(DEFAULT_MAX_IDLE_CONNECTIONS);
+    poolConfig.setMaxTotal(poolMaxTotal);
+    poolConfig.setMaxIdle(poolMaxIdle);
+    poolConfig.setMinIdle(poolMinIdle);
     poolConfig.setBlockWhenExhausted(true);
     poolConfig.setMaxWait(Duration.ofMillis(poolMaxWaitMs));
     poolConfig.setJmxEnabled(false);
