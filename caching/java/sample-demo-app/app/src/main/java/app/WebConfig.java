@@ -14,44 +14,55 @@
  * limitations under the License.
  */
 
-/**
- * Use this configuration to allow CORS requests from the frontend.
- */
-
 package app;
 
+import java.util.Arrays;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/** Configures Cross-Origin Resource Sharing (CORS) settings for the application. */
 @Configuration
 public class WebConfig {
 
-  // Default to localhost:3000 if not set
-  @Value("${ALLOWED_ORIGINS:*}")
+  /** Allowed origin URLs for CORS (comma-separated). Defaults to local development origin. */
+  @Value("${ALLOWED_ORIGINS:http://localhost:8080}")
   private String allowedOrigins;
-  // Default to GET,POST,PUT,DELETE methods if not set
+
+  /** Allowed HTTP methods for CORS (comma-separated). */
   @Value("${ALLOWED_METHODS:GET,POST,PUT,DELETE}")
   private String allowedMethods;
 
-  // Default to all headers if not set
+  /** Allowed HTTP headers for CORS requests (comma-separated). */
   @Value("${ALLOWED_HEADERS:*}")
   private String allowedHeaders;
 
+  /**
+   * Registers CORS mappings with explicit allowed origins.
+   *
+   * @return {@link WebMvcConfigurer} with restricted CORS configuration
+   */
   @Bean
   public WebMvcConfigurer corsConfigurer() {
     return new WebMvcConfigurer() {
       @Override
-      public void addCorsMappings(CorsRegistry registry) {
+      public void addCorsMappings(final CorsRegistry registry) {
         registry
-            .addMapping("/**") // Allow all endpoints
-            .allowedOriginPatterns(allowedOrigins.split(","))// Allow Patterns
-            .allowedMethods(allowedMethods.split(",")) // Restrict HTTP methods
-            .allowedHeaders(allowedHeaders.split(",")) // Specify allowed headers
-            .allowCredentials(true); // Allow cookies and credentials
+            .addMapping("/**")
+            .allowedOrigins(parseCsv(allowedOrigins))
+            .allowedMethods(parseCsv(allowedMethods))
+            .allowedHeaders(parseCsv(allowedHeaders))
+            .allowCredentials(true);
       }
     };
+  }
+
+  private static String[] parseCsv(final String csv) {
+    return Arrays.stream(csv.split(","))
+        .map(String::trim)
+        .filter(entry -> !entry.isEmpty())
+        .toArray(String[]::new);
   }
 }
