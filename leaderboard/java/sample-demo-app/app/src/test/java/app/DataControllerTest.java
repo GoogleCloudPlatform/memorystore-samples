@@ -37,7 +37,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.jedis.resps.Tuple;
 
@@ -47,7 +47,7 @@ class DataControllerTest {
   @Mock
   private LeaderboardRepository leaderboardRepository;
   @Mock
-  private Jedis jedis;
+  private JedisPooled jedis;
   private DataController dataController;
 
   @BeforeEach

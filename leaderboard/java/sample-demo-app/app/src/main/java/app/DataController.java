@@ -21,7 +21,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.jedis.resps.Tuple;
 
@@ -35,8 +35,8 @@ public class DataController {
   /** Repository for persisting leaderboard entries. */
   private final LeaderboardRepository leaderboardRepository;
 
-  /** Redis client for caching leaderboard data. */
-  private final Jedis jedis;
+  /** Thread-safe pooled Redis client for caching leaderboard data. */
+  private final JedisPooled jedis;
 
   /**
    * Constructs a new DataController.
@@ -44,7 +44,7 @@ public class DataController {
    * @param redisClient Redis client for caching
    * @param repository  Repository for persistence
    */
-  public DataController(final Jedis redisClient,
+  public DataController(final JedisPooled redisClient,
       final LeaderboardRepository repository) {
     this.leaderboardRepository = repository;
     this.jedis = redisClient;

@@ -24,7 +24,7 @@ package app;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Controller;
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 
 @Controller
 public class DataController {
@@ -33,9 +33,9 @@ public class DataController {
   public static final Long DEFAULT_TTL = 60L;
 
   private final ItemsRepository itemsRepository;
-  private final Jedis jedis;
+  private final JedisPooled jedis;
 
-  public DataController(ItemsRepository cacheRepository, Jedis jedis) {
+  public DataController(ItemsRepository cacheRepository, JedisPooled jedis) {
     this.itemsRepository = cacheRepository;
     this.jedis = jedis;
   }

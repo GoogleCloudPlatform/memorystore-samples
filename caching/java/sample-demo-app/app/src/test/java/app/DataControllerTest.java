@@ -34,7 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 
 @ExtendWith(MockitoExtension.class)
 class DataControllerTest {
@@ -43,7 +43,7 @@ class DataControllerTest {
   private ItemsRepository itemsRepository;
 
   @Mock
-  private Jedis jedis;
+  private JedisPooled jedis;
 
   private DataController dataController;
 
