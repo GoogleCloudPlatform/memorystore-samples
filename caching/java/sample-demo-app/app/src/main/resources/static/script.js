@@ -33,6 +33,10 @@ async function apiRequest(url, options = {}) {
       throw new Error(errorText);
     }
 
+    if (!res.ok) {
+      throw new Error("An error occurred");
+    }
+
     const data = await res.json();
 
     /** Calculate response time in ms */
@@ -126,10 +130,16 @@ function setResponse({ type, data }) {
 
 /** Search for an Item */
 async function search() {
+  const query = queryRef.value.trim();
+  if (!query) {
+    setResponse({ type: "error", data: "Please enter an item ID" });
+    return;
+  }
+
   setLoading(true);
   itemsContainer.innerHTML = "";
 
-  const resp = await apiRequest(`/item/${queryRef.value.trim()}`);
+  const resp = await apiRequest(`/item/${encodeURIComponent(query)}`);
   if (resp && resp.data) {
     const itemElement = document.createElement("div");
     itemElement.className =
@@ -211,7 +221,9 @@ async function createItem() {
 async function deleteItem(id) {
   setLoading(true);
 
-  const resp = await apiRequest(`/item/delete/${id}`, { method: "DELETE" });
+  const resp = await apiRequest(`/item/delete/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 
   if (!resp) {
     setResponse({ type: "error", data: "Failed to delete item" });
@@ -221,7 +233,9 @@ async function deleteItem(id) {
   setResponse({ type: "success", data: "Item deleted successfully" });
 
   /** Remove the item from the UI */
-  const itemElement = document.querySelector(`.item[data-id="${id}"]`);
+  const itemElement = Array.from(itemsContainer.querySelectorAll(".item")).find(
+    (el) => el.dataset.id === String(id)
+  );
   if (itemElement) {
     itemElement.remove();
   }
@@ -230,16 +244,30 @@ async function deleteItem(id) {
   setLoading(false);
 }
 
+/**
+ * Escapes a value for safe interpolation into HTML text or attribute content.
+ * Item fields originate from untrusted user input, so every value placed in a
+ * template string must pass through escapeHtml before assignment to innerHTML.
+ */
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Add Item Styling */
 function addItemStyling({ id, name, price, description }) {
   return `
-    <p class="m-auto pl-8 pr-16 text-lg font-bold">ID: <span class="id">${id}</span></p>
+    <p class="m-auto pl-8 pr-16 text-lg font-bold">ID: <span class="id">${escapeHtml(id)}</span></p>
     <div class="flex-1">
         <div class="flex flex-row justify-between mb-3">
-            <p class="text-lg">Name: <span class="name">${name}</span></p>
-            <p class="text-lg">Price: <span class="price">$${price}</span></p>
+            <p class="text-lg">Name: <span class="name">${escapeHtml(name)}</span></p>
+            <p class="text-lg">Price: <span class="price">$${escapeHtml(price)}</span></p>
         </div>
-        <p class="text-md text-gray-600 mb-3"><span class="description">${description}</span></p>
+        <p class="text-md text-gray-600 mb-3"><span class="description">${escapeHtml(description)}</span></p>
         <div class="flex justify-end">
           <button class="delete-btn p-2 text-md text-white bg-red-500 rounded">Delete item</button>
         </div>
