@@ -32,15 +32,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 
 @RestController
 @RequestMapping("/api/basket")
 public class BasketController {
 
-  private final Jedis jedis;
+  private final JedisPooled jedis;
 
-  public BasketController(Jedis jedis) {
+  public BasketController(JedisPooled jedis) {
     this.jedis = jedis;
   }
 

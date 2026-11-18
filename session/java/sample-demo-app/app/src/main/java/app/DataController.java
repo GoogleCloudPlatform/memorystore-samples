@@ -20,15 +20,15 @@ package app;
 
 import java.util.Optional;
 import org.springframework.stereotype.Controller;
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 
 @Controller
 public class DataController {
 
   private final AccountRepository accountRepository;
-  private final Jedis jedis;
+  private final JedisPooled jedis;
 
-  public DataController(AccountRepository accountRepository, Jedis jedis) {
+  public DataController(AccountRepository accountRepository, JedisPooled jedis) {
     this.accountRepository = accountRepository;
     this.jedis = jedis;
   }

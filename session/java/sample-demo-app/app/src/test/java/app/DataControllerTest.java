@@ -35,14 +35,14 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPooled;
 
 @ExtendWith(MockitoExtension.class)
 class DataControllerTest {
 
   @Mock private AccountRepository accountRepository;
 
-  @Mock private Jedis jedis;
+  @Mock private JedisPooled jedis;
 
   private DataController dataController;
 
