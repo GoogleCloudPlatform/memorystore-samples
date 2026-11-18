@@ -151,6 +151,18 @@ function emptyTemplate() {
   return `<div class="text-center py-8 text-gray-500">No entries found</div>`;
 }
 
+// Escapes a value for safe interpolation into HTML text or attribute content.
+// Leaderboard entries come from untrusted user input, so every value placed in
+// a template string must go through this before being assigned to innerHTML.
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Template functions separate markup generation
 function entriesTemplate() {
   return `
@@ -160,11 +172,11 @@ function entriesTemplate() {
           (entry) => `
         <li class="py-3 hover:bg-gray-50">
           <div class="flex justify-between items-center">
-            <span class="w-16">${entry.position + 1}.</span>
-            <span class="flex-1">${entry.username}</span>
-            <span class="w-24 text-right font-mono text-blue-600">${
+            <span class="w-16">${escapeHtml(entry.position + 1)}.</span>
+            <span class="flex-1">${escapeHtml(entry.username)}</span>
+            <span class="w-24 text-right font-mono text-blue-600">${escapeHtml(
               entry.score
-            }</span>
+            )}</span>
           </div>
         </li>
       `
