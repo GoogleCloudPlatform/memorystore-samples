@@ -96,8 +96,7 @@ class DataControllerTest {
 
         // Assert & Verify
         assertEquals(token, result);
-        verify(jedis).set(token, username);
-        verify(jedis).expire(token, Global.TOKEN_EXPIRATION);
+        verify(jedis).setex(token, Global.TOKEN_EXPIRATION, username);
       }
     }
 
@@ -130,8 +129,10 @@ class DataControllerTest {
             .when(() -> Utils.generateToken(Global.TOKEN_BYTE_LENGTH))
             .thenReturn(token);
 
-        // Force an error in Jedis.set(...)
-        doThrow(new RuntimeException("Jedis error")).when(jedis).set(token, username);
+        // Force an error in Jedis.setex(...)
+        doThrow(new RuntimeException("Jedis error"))
+            .when(jedis)
+            .setex(token, Global.TOKEN_EXPIRATION, username);
 
         // Should throw RuntimeException because Jedis fails
         assertThrows(
